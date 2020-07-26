@@ -17,8 +17,8 @@ from optparse import OptionParser
 
 
 class CreateTaskQueue(multiprocessing.Process):
-    def __init__(self, queue, num_comm, start_ids=1, num_ids_chunk=500, req_per_sec=15):
-        super().__init__(self)
+    def __init__(self, queue, num_comm, start_ids=1, num_ids_chunk=500, req_per_sec=20):
+        multiprocessing.Process.__init__(self)
         self.num_ids_chunk = num_ids_chunk
         self.start_ids = start_ids
         self.num_comm = num_comm
@@ -29,6 +29,7 @@ class CreateTaskQueue(multiprocessing.Process):
         return ','.join(str(id) for id in list_ids)
 
     def run(self):
+        print(self.name)
         request_package = []
         for item_id in range(self.num_comm//self.num_ids_chunk):
             request_package.append(
@@ -44,31 +45,39 @@ class CreateTaskQueue(multiprocessing.Process):
                     self.queue.put(self.create_ids_str(request_package))
                 if not ind_list % self.req_per_sec and ind_list:
                     time.sleep(1)
-
-
+        
+            
 class TaskVkPars(multiprocessing.Process):
-    
-    def __init__(self, queue):
+    def __init__(self, queue, fields):
         multiprocessing.Process.__init__(self)
         self.queue = queue
+        #self.session = session
+        self.fields = fields
 
     async def reqw(self):
-        print(self.name)
+        
+        req = '1,2,3,4,5,6,7'
+        data = await self.api.groups.getById(group_ids=req, fields=self.fields)
+        print('\n')
+        print(data)
 
     async def main(self):
-        while True:
-            try:
-                await asyncio.wait_for(self.reqw(), timeout=10)
-            except asyncio.TimeoutError:
-                log.info('Error timeout request_period')
-            await asyncio.sleep(2)
-            break
+        async with aiovk.TokenSession(access_token=token_read()) as session:
+            self.api = aiovk.API(session)
+            while True:
+                
+                try:
+                    await asyncio.wait_for(self.reqw(), timeout=10)
+                except asyncio.TimeoutError:
+                    log.info('Error timeout request_period')
+                await asyncio.sleep(2)
+                print(self.queue.qsize())
+                break
         
     def run(self):
         self.proc_name = self.name
         print(self.proc_name)
-        
-        task = asyncio.run(self.main())
+        asyncio.run(self.main())
         log.info('Will be create %s processes' % self.proc_name)
            
             
@@ -114,30 +123,38 @@ async def main():
     print(cpu_num)
     queue = multiprocessing.Queue()
     
-    tasks = [Task(queue) for _ in range(cpu_num)]
-    
+    taskq = CreateTaskQueue(queue, 200,num_ids_chunk=10)
+    taskq.start()
+    #async with aiovk.TokenSession(access_token=token_read()) as session: #
+    filds ='site,status,type,city,country,contacts,description,wiki_page,start_date,activity,status,age_limits,main_section,members_count,place'
+    tasks = [TaskVkPars(queue, filds) for _ in range(2)]
+
+
     for t in tasks:
         t.start()
 
-    for t in tasks:
-        t.join()
+    taskq.join()
+    for _ in tasks:
+        queue.put(None)
 
-    async with aiovk.TokenSession(access_token=token_read()) as session: #
-        filds ='site,status,type,city,country,contacts,description,wiki_page,start_date,activity,status,age_limits,main_section,members_count,place'
+    for t in tasks:
+        t.join()        
         
-        api = aiovk.API(session)
-        req = ''
-        for i in range(45678,45678+100):
-            req += str(i)+','
-        req += '191527376'
-        print(req)
-        data = await api.groups.getById(group_ids=req, fields=filds)
+        
+        
+    #    api = aiovk.API(session)
+    #    req = ''
+    #    for i in range(45678,45678+100):
+    #        req += str(i)+','
+    #    req += '191527376'
+        #print(req)
+    #    data = await api.groups.getById(group_ids=req, fields=filds)
         #data2 = await api.database.getCities(country_id=1, offset=100000, count=1000 ,need_all=1)
-        data1 = await api.groups.getMembers(group_id=191527376)
+        #data1 = await api.groups.getMembers(group_id=191527376)
         
-        for i in data:
-            if 'description' in i:
-                print(i['name'], i['activity'],'\n', type(i))  
+    #    for i in data:
+    #        if 'description' in i:
+    #            print(i['name'], i['activity'],'\n', type(i))  
         #print(data)
 
 if __name__ == "__main__":
