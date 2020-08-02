@@ -11,11 +11,14 @@ import aiohttp
 import asyncio
 import multiprocessing
 from optparse import OptionParser
-from bd_cwr import connect_bd
 from store import RedisStore
+from classific import group_classification
+from bd_cwr import connect_bd, create_tab, insert_in_table
+
 
 NUM_PROC_TASK_VK_PARS = 2
 FIELDS_OUT = ['id', 'name', 'city','country', 'description',  'age_limits', 'activity', 'members_count']
+
 
 op = OptionParser("Script parsing VK")
 op.add_option("-l", "--log", default=None, help="Logging space, default stdout")
@@ -100,7 +103,6 @@ class TaskVkPars(multiprocessing.Process):
             key = 'rid' + hashlib.md5(str_list_comm).hexdigest()
             if self.store.set(key, str_list_comm, 360):
                 self.queue_store.put(key)
-                print(key)
         except Exception as e:
             log.info(e)
    
@@ -114,8 +116,6 @@ class TaskVkPars(multiprocessing.Process):
         async with aiovk.TokenSession(access_token=self.token) as session:
             self.api = aiovk.API(session)
             while True:
-                #strquer = self.queue.get()
-                #if strquer is None:
                 if self.stop:
                     break
                 try:
@@ -126,15 +126,44 @@ class TaskVkPars(multiprocessing.Process):
                 
     def run(self):
         self.proc_name = self.name
-        print(self.proc_name)
+        log.debug(self.proc_name)
         asyncio.run(self.main())
         log.info('Will be create %s processes' % self.proc_name)
-           
+
+
+def classif_comm(data_train, queue_store, store, bd):
+    print(data_train)
+    while True:
+        try:
+            keys = queue_store.get(timeout=1)
+        except:
+            continue
+        if keys is None:
+            break
+        data = json.loads(store.get(keys))
+        
+        '''classif = []
+        for elem in data_train.keys():
+            result = group_classification(data, data_train, elem, ['name', 'description'])
+            c = []
+            for index in range(len(result)):
+                c.append({elem:result[index]})
+            
+            classif.append()
+        for index in '''
+
 
 def main(opts):
     settings, secur = configs_load(opts)
+    print(settings)
     store = RedisStore()
     con, curs = connect_bd(db=opts.bdata, passw=secur['security']['pswdbd'])
+    try:
+        create_tab(con, curs, "base_comm", {"id":"INT PRIMARY KEY", 'name':"VARCHAR(80)",'classif':"VARCHAR(80)"})
+        create_tab(con, curs, "loc_comm", {"id":"INT PRIMARY KEY", 'country':"VARCHAR(80)",'city':"VARCHAR(80)"})
+        create_tab(con, curs, "aud_comm", {"id":"INT PRIMARY KEY", 'nmembers':"INT",'age':"VARCHAR(4)"})
+    except Exception as e:
+        log.error(e.args[0])
     queue = multiprocessing.Queue()
     queue_store = multiprocessing.Queue()
     taskq = CreateTaskQueue(queue, opts.numpackco, start_ids=opts.startid , num_ids_chunk=opts.packreq)
@@ -147,17 +176,27 @@ def main(opts):
         store, 
         queue_store
         ) for _ in range(NUM_PROC_TASK_VK_PARS)]
-
     for t in tasks:
         t.start()
+    taskclsf = multiprocessing.Process(
+        target=classif_comm, 
+        args=(settings['train'], 
+        queue_store, 
+        store, 
+        [con, curs]))
+    taskclsf.start()
 
     taskq.join()
     for _ in tasks:
         queue.put(None)
     print('Close')
     for t in tasks:
-        t.join()        
-    print('close2')  
+        t.join() 
+    queue_store.put(None)
+           
+    print('close2')
+    taskclsf.join()
+    print('close3')
         
 def configs_load(opts):
     with open(opts.config, 'r') as file:
@@ -178,3 +217,5 @@ if __name__ == "__main__":
         #asyncio.run(main(opts))
     except KeyboardInterrupt:
         pass
+    except Exception as e:
+        log.error(e)

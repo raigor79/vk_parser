@@ -1,6 +1,10 @@
 import psycopg2
 
 
+class BDError(Exception):
+    pass
+
+
 def connect_bd(db='postgres', user='postgres', passw='', host="127.0.0.1", port="5432"):
     conn = None
     try:
@@ -8,59 +12,55 @@ def connect_bd(db='postgres', user='postgres', passw='', host="127.0.0.1", port=
         cur = conn.cursor()
         
     except (Exception, psycopg2.DatabaseError) as error: 
-        print("Error while creating table", error)  
+        raise BDError("Error while creating table -", error)  
     return conn, cur 
 
 
-def create_db(conn, cur, name_bd):
+def create_tab(conn, cur, name_table, kwargs):
     try:
-        str_cmd = f'CREATE DATABASE {name_bd}'
+        par_col = ', '.join(f'{name} {val}' for name, val in kwargs.items())
+        str_cmd = f'CREATE TABLE {name_table} ({par_col})'
+        print(str_cmd)
         cur.execute(str_cmd)
-    except psycopg2.OperationalError as error:
-        print(f'The error {error} occured')  
-    conn.commit()
-
-def create_tab(conn, cur, name_table, **kwargs):
-    try:
-        par_col = ''.join(f'{name} {val},' for name, val in kwargs.items())
-        str_cmd = f'CREATE TABLE {name_table}'
-        cur.execute('CREATE TABLE test1 (id INT PRIMARY KEY, name VARCHAR(10), salary INT, dept INT)') 
     except psycopg2.DatabaseError as error:
-        print(f'Table {error}.')
+        raise BDError("Error create table.")
     conn.commit()
 
-def insert_in_table(con, cur, id = 1, name = '', salary = 1000, dept = 1):
+
+def insert_in_table(con, cur, name_table, args):
     try:
-        h = 'INSERT INTO {} VALUES(%s, %s, %s, %s);'.format('emp')
-       
-        cur.execute(h, (id, name, salary, dept))
+        par_col = ','.join(f'%s' for _ in args)
+        h = f'INSERT INTO {name_table} VALUES({par_col});'
+        cur.execute(h, args)
     except Exception as error:
-        print('error', error)
+        raise BDError("Error insert in table.")
     con.commit()
 
-def fetch_data(conn, cur):
+
+def fetch_data(conn, cur, name_table):
     try:
-        cur.execute('SELECT * FROM emp')
+        h = f'SELECT * FROM {name_table}'
+        cur.execute(h)
     except:
-        print('error !')
-    # сохранить результат в данных
+       raise BDError("Error read from table.")
     data = cur.fetchall()
-    # вернуть результат
     return data 
 
+def del_table(conn, cur, name_table):
+    try:
+        h = f"DROP TABLE {name_table}"
+        cur.execute(h)
+    except:
+        raise BDError('Error delete table.')
+    conn.commit()
+
+
 if __name__ == "__main__":
-    #con, cur = connect_bd(db="postgres", user="postgres", passw="vkraigor")
-    ##create_db(con, 'vkmybd1')
-    con, cur = connect_bd(db="vkmybd", user="postgres", passw="vkraigor")
-    #create_db(con, cur, 'mydb')
-    create_tab(con, cur, 'tab1')
-    """ insert_in_table(con, cur, 6, 'adith', 1000, 2)
+    """primer"""
+    """con, cur = connect_bd(db="vkmybd", user="postgres", passw="")
+    create_tab(con, cur, 'loc', {"id":"INT PRIMARY KEY", 'name':"VARCHAR(80)", "classification": 'VARCHAR(80)'})
+    insert_in_table(con, cur, 'loc', [2000, 'biysk', 'city'])
+    dat = fetch_data(con, cur, 'loc')
+    del_table(con, cur, 'loc')"""
 
-    insert_in_table(con, cur, 9, 'tyrion', 100000, 2)
-
-    insert_in_table(con, cur, 10, 'jon', 100, 3)
-
-    insert_in_table(con, cur, 11, 'daenerys', 10000, 4)""" 
-    dat = fetch_data(con, cur)
-    print(dat)
-
+    

@@ -33,13 +33,5 @@ class RedisStore():
                 time.sleep(self.delay*attm)
 
 
-
 if __name__ == "__main__":
-    id_dev = RedisStore()
-    di = [{'1':'привет доброе утро1234','2':'проба'}]
-    id_dev.set('3', json.dumps(di), 10)
-    print(json.dumps(di))
-    print(id_dev.get('3')) 
-    y = json.loads(id_dev.get('3'))
-    print(y[0]['1'])
-    print(json.loads((id_dev.get('3'))))    
+    pass   
