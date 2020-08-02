@@ -56,6 +56,7 @@ class CreateTaskQueue(multiprocessing.Process):
     def run(self):
         start_id = self.start_ids
         n = 1
+        log.info('Will be create %s processes' % self.name)
         while True:
             if self.queue.qsize() < self.req_per_sec:
                 request_package = self.create_ids_str(self.start_ids, self.num_ids_chunk, self.req_per_sec)
@@ -63,6 +64,7 @@ class CreateTaskQueue(multiprocessing.Process):
                     self.queue.put(id_list)
                 self.start_ids += self.num_ids_chunk * self.req_per_sec
             if self.start_ids > start_id + self.num_ids_chunk * (self.num_comm): 
+                log.info('Process %s close' % self.name)
                 break
             time.sleep(1)
        
@@ -125,14 +127,53 @@ class TaskVkPars(multiprocessing.Process):
                 await asyncio.sleep(1)
                 
     def run(self):
-        self.proc_name = self.name
-        log.debug(self.proc_name)
+        log.debug(self.name)
+        log.info('Will be create %s processes' % self.name)
         asyncio.run(self.main())
-        log.info('Will be create %s processes' % self.proc_name)
+        log.info('Process %s close' % self.name)
+        
 
 
-def classif_comm(data_train, queue_store, store, bd):
-    print(data_train)
+def age_limit(val):
+    if  not isinstance(val, int):
+        return 'None'
+    elif val == 1:
+        return 'not'
+    elif val == 2:
+        return '16+'
+    elif val == 3:
+        return '18+'
+
+def insert_in_bd(data, classif, data_train, con, curs):
+    for index in range(len(data)):
+        clf = 'None'
+        for item in data_train.keys():
+            if classif[item][index] == 1: 
+                clf = item
+        try:
+            if 'city' in data[index]:
+                city = data[index]['city']['title']
+            else:
+                city =''
+            if 'country' in data[index]:
+                country = data[index]['country']['title']
+            else:
+                country = ''
+        except:
+            city = ''
+            country = ''
+            if data[index]['age_limits'] == '':
+                age = ''
+        if isinstance(data[index], int):
+                num_membr = data[index]['members_count']
+        else:
+            num_membr = 0
+        insert_in_table(con, curs, 'base_comm', [int(data[index]['id']), data[index]['name'], clf])
+        insert_in_table(con, curs, 'loc_comm',  [int(data[index]['id']), country, city])
+        insert_in_table(con, curs, 'aud_comm',  [int(data[index]['id']), num_membr, age_limit(data[index]['age_limits'])])
+
+
+def classif_comm(data_train, queue_store, store, con, curs):
     while True:
         try:
             keys = queue_store.get(timeout=1)
@@ -141,25 +182,19 @@ def classif_comm(data_train, queue_store, store, bd):
         if keys is None:
             break
         data = json.loads(store.get(keys))
-        
-        '''classif = []
+        classif = {}
         for elem in data_train.keys():
             result = group_classification(data, data_train, elem, ['name', 'description'])
-            c = []
-            for index in range(len(result)):
-                c.append({elem:result[index]})
-            
-            classif.append()
-        for index in '''
-
+            classif.update({elem:result})
+        insert_in_bd(data, classif, data_train, con,curs)
+        
 
 def main(opts):
     settings, secur = configs_load(opts)
-    print(settings)
     store = RedisStore()
     con, curs = connect_bd(db=opts.bdata, passw=secur['security']['pswdbd'])
     try:
-        create_tab(con, curs, "base_comm", {"id":"INT PRIMARY KEY", 'name':"VARCHAR(80)",'classif':"VARCHAR(80)"})
+        create_tab(con, curs, "base_comm", {"id":"INT PRIMARY KEY", "name":"VARCHAR(256)","classif":"VARCHAR(80)"})
         create_tab(con, curs, "loc_comm", {"id":"INT PRIMARY KEY", 'country':"VARCHAR(80)",'city':"VARCHAR(80)"})
         create_tab(con, curs, "aud_comm", {"id":"INT PRIMARY KEY", 'nmembers':"INT",'age':"VARCHAR(4)"})
     except Exception as e:
@@ -183,21 +218,19 @@ def main(opts):
         args=(settings['train'], 
         queue_store, 
         store, 
-        [con, curs]))
+        con,
+        curs))
     taskclsf.start()
-
     taskq.join()
     for _ in tasks:
         queue.put(None)
-    print('Close')
     for t in tasks:
         t.join() 
     queue_store.put(None)
-           
-    print('close2')
     taskclsf.join()
-    print('close3')
-        
+    log.info('Scripts finished working')
+
+
 def configs_load(opts):
     with open(opts.config, 'r') as file:
         settings = json.load(file)
@@ -214,7 +247,6 @@ if __name__ == "__main__":
     try:    
         log.info("Start")
         main(opts)
-        #asyncio.run(main(opts))
     except KeyboardInterrupt:
         pass
     except Exception as e:
