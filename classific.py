@@ -1,7 +1,4 @@
-import numpy
-import sklearn
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.neighbors import KNeighborsClassifier
 
 
@@ -43,54 +40,5 @@ def group_classification(data, data_training, par_train, keys):
     return knn_classif.predict(x_data[:len(list_comm_sig)])
 
 
- 
-
-
 if __name__== "__main__":
-    """st_1 = ['Новости науки dfdfsdf  dsfsrer ', 'rwes es ers новости день',  'новости rees resrsers s погоды', 'свежие fssdfshj  fsfef f новости', 'лента новостей', 'новости первые вторые, третьи', 
-        'sa dagfef dsdsgd новости', 'sdf sffsdf sfd fdaразвлечения', 'развлекательный канал', "мир кино", "планета кино", "все о кино", 'фильмы', 'кинофильмы', 'новостной канал', 'Новости сегодня', 
-        'Новости кино', "Кино сегодня", "развленчение игры кино", "привет", 'свежие новости сегодня', 'объявления города бийска пригородные новости', 'новостная лента', "бизнес котоировки акции", "новости бизнеса", 'сапог', '']
-    vector = TfidfVectorizer()
-    mas = vector.fit_transform(st_1)
-    #print(mas.toarray())
-    #print(vector.get_feature_names())   
-    #print(vector.get_feature_names().index('кино'))
-    x = mas[:15]
-    test = mas[15:]
-    y = [1,1,1,1,1,1,1,0,0,0,0,0,0,0,1]
-    print(x, len(y), test)
-    knn = KNeighborsClassifier(n_neighbors=5)
-    knn.fit(x,y[:15])
-   
-    knn_pre = knn.predict(test)
-    print(knn_pre)"""
-    m = {
-        "news": [
-            "новости", 
-            "новостной сайт",
-            "новости сегодня",
-            "новостной канал",
-            "свежие новости",
-            "деловые новости",
-            "финансовые новости",
-            "cми",
-            "средства массовой информации",
-            "интернет-сми",
-            "информационный канал"
-        ], 
-        "entertainment": [
-            "кино",
-            "игры",
-            "равлечения",
-            "музыка",
-            "разлекательный канал",
-            "юмор",
-            "игра",
-            "смешное видео",
-            "музыкальный канал",
-            "фильмы",
-            "кинофильмы"
-        ]
-        }
-    ss = group_classification([{'discription':'кино'},{'discription': "новости"},{'discription':'модные новости'}], m, 'news',['discription'])
-    print(ss)
+    pass

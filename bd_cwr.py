@@ -58,14 +58,13 @@ def del_table(conn, cur, name_table):
 
 if __name__ == "__main__":
     """primer"""
-    con, cur = connect_bd(db="vkmybd", user="postgres", passw="")
+    #con, cur = connect_bd(db="vkmybd", user="postgres", passw="")
     #create_tab(con, cur, 'loc_comm', {"id":"INT PRIMARY KEY", 'name':"VARCHAR(80)", "classification": 'VARCHAR(80)'})
     #insert_in_table(con, cur, 'loc_comm', [1334, 'юийска', 'None'])
     #dat = fetch_data(con, cur, 'loc_comm')
-    del_table(con, cur, 'base_comm')
-    del_table(con, cur, 'aud_comm')
-    del_table(con, cur, 'loc_comm')
-    
+    #del_table(con, cur, 'base_comm')
+    #del_table(con, cur, 'aud_comm')
+    #del_table(con, cur, 'loc_comm')
     #print(dat)
 
     
