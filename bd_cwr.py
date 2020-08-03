@@ -33,8 +33,7 @@ def insert_in_table(con, cur, name_table, args):
         h = f'INSERT INTO {name_table} VALUES({par_col});'
         cur.execute(h, args)
     except Exception as error:
-        print(error, args)
-        #raise BDError("Error insert in table.")
+        raise BDError("Error insert in table.")
     con.commit()
 
 
