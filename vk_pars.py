@@ -133,7 +133,6 @@ class TaskVkPars(multiprocessing.Process):
         log.info('Process %s close' % self.name)
         
 
-
 def age_limit(val):
     if  not isinstance(val, int):
         return 'None'
@@ -143,6 +142,7 @@ def age_limit(val):
         return '16+'
     elif val == 3:
         return '18+'
+
 
 def insert_in_bd(data, classif, data_train, con, curs):
     for index in range(len(data)):
