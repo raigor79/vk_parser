@@ -10,8 +10,9 @@ import logging
 import aiohttp
 import asyncio
 import multiprocessing
-from optparse import OptionParser
 from store import RedisStore
+from dataclasses import dataclass
+from optparse import OptionParser
 from classific import group_classification
 from bd_cwr import connect_bd, create_tab, insert_in_table
 
@@ -31,10 +32,33 @@ op.add_option("-a", "--access", default="psswd.json", help="Storage file for acc
 (opts, args) = op.parse_args()
 
 
-def write_file(data):
-    with open('trainnews.txt', 'wt', encoding='utf-8') as file:
-        file.write(data)
+@dataclass
+class DataDBVK():
+    ids: int = 0
+    name: str = ''
+    country: str = ''
+    city: str = ''
+    age_limits: int = 0
+    members_count: int = 0
+    clf: str = ''
+        
+    def __post_init__(self):
+        self.error_list = []
+        for field, vtype in self.__annotations__.items():
+            try:
+                self.__valid__(self.__dict__[field], vtype)
+            except Exception as e:
+                self.error_list.append(f'{field}:{e}')
+                self.__setattr__(
+                    field,
+                    self.__dataclass_fields__[field].default
+                    )
     
+    def __valid__(self, value, type_value):
+        if not isinstance(value, type_value):
+            msg = f"Error, must be {(type_value)}"
+            raise TypeError(msg)
+
 
 class CreateTaskQueue(multiprocessing.Process):
     def __init__(self, queue, num_comm, start_ids=1, num_ids_chunk=100, req_per_sec=20):
@@ -84,9 +108,12 @@ class TaskVkPars(multiprocessing.Process):
     def extract_info(self, data):
         list_comm = []
         for item in data:
+            if item['name'] == 'DELETED':
+                continue
             dict_info_comm = {}
             for field in self.fields_out:
                 if field in item:
+                    
                     dict_info_comm[field] = item[field]
                 else:
                     dict_info_comm[field] = ''
@@ -150,27 +177,21 @@ def insert_in_bd(data, classif, data_train, con, curs):
         for item in data_train.keys():
             if classif[item][index] == 1: 
                 clf = item
+        pack_field = {'clf': clf}
+        for field in ['city', 'country']:
+            if field in data[index] and '' not in data[index][field]:
+                pack_field[field] = data[index][field]['title'] 
+        for field in ['age_limits', 'members_count', 'name']:
+            if field in data[index]:
+                pack_field[field] = data[index][field] 
+        pack_field['ids'] = int(data[index]['id'])
+        data_c = DataDBVK(**pack_field)
         try:
-            if 'city' in data[index]:
-                city = data[index]['city']['title']
-            else:
-                city =''
-            if 'country' in data[index]:
-                country = data[index]['country']['title']
-            else:
-                country = ''
+            insert_in_table(con, curs, 'base_comm', [data_c.ids, data_c.name, data_c.clf])
+            insert_in_table(con, curs, 'loc_comm',  [data_c.ids, data_c.country, data_c.city])
+            insert_in_table(con, curs, 'aud_comm',  [data_c.ids, data_c.members_count, age_limit(data_c.age_limits)])
         except:
-            city = ''
-            country = ''
-            if data[index]['age_limits'] == '':
-                age = ''
-        if isinstance(data[index], int):
-                num_membr = data[index]['members_count']
-        else:
-            num_membr = 0
-        insert_in_table(con, curs, 'base_comm', [int(data[index]['id']), data[index]['name'], clf])
-        insert_in_table(con, curs, 'loc_comm',  [int(data[index]['id']), country, city])
-        insert_in_table(con, curs, 'aud_comm',  [int(data[index]['id']), num_membr, age_limit(data[index]['age_limits'])])
+            log.info(f'Error insert in the database  community with id{data_c.ids}')
 
 
 def classif_comm(data_train, queue_store, store, con, curs):
