@@ -14,7 +14,7 @@ from store import RedisStore
 from dataclasses import dataclass
 from optparse import OptionParser
 from classific import group_classification
-from bd_cwr import connect_bd, create_tab, insert_in_table
+from bd_cwr import connect_bd, create_tab, insert_in_table, fetch_data
 
 
 NUM_PROC_TASK_VK_PARS = 2
@@ -171,30 +171,36 @@ def age_limit(val):
         return '18+'
 
 
-def insert_in_bd(data, classif, data_train, con, curs):
+def insert_in_bd(data, classif, data_train, con, curs, list_ids_db):
+    count = 0
     for index in range(len(data)):
         clf = 'None'
         for item in data_train.keys():
             if classif[item][index] == 1: 
                 clf = item
         pack_field = {'clf': clf}
+        pack_field['ids'] = int(data[index]['id'])
+        if pack_field['ids'] in list_ids_db:
+            continue
         for field in ['city', 'country']:
             if field in data[index] and '' not in data[index][field]:
                 pack_field[field] = data[index][field]['title'] 
         for field in ['age_limits', 'members_count', 'name']:
             if field in data[index]:
-                pack_field[field] = data[index][field] 
-        pack_field['ids'] = int(data[index]['id'])
+                pack_field[field] = data[index][field]
         data_c = DataDBVK(**pack_field)
         try:
             insert_in_table(con, curs, 'base_comm', [data_c.ids, data_c.name, data_c.clf])
             insert_in_table(con, curs, 'loc_comm',  [data_c.ids, data_c.country, data_c.city])
             insert_in_table(con, curs, 'aud_comm',  [data_c.ids, data_c.members_count, age_limit(data_c.age_limits)])
+            count += 1
         except:
             log.info(f'Error insert in the database  community with id{data_c.ids}')
+    return count
 
 
-def classif_comm(data_train, queue_store, store, con, curs):
+def classif_comm(data_train, queue_store, store, con, curs, list_ids_db):
+    data_count = 0
     while True:
         try:
             keys = queue_store.get(timeout=1)
@@ -207,22 +213,32 @@ def classif_comm(data_train, queue_store, store, con, curs):
         for elem in data_train.keys():
             result = group_classification(data, data_train, elem, ['name', 'description'])
             classif.update({elem:result})
-        insert_in_bd(data, classif, data_train, con,curs)
-        
+        data_count += insert_in_bd(data, classif, data_train, con, curs, list_ids_db)
+    log.info('In the DataBase {} ids add {} new ids community'.format((len(list_ids_db)+data_count), data_count))   
+
 
 def main(opts):
     settings, secur = configs_load(opts)
+    print(opts)
     store = RedisStore()
     con, curs = connect_bd(db=opts.bdata, passw=secur['security']['pswdbd'])
     try:
         create_tab(con, curs, "base_comm", {"id":"INT PRIMARY KEY", "name":"VARCHAR(256)","classif":"VARCHAR(80)"})
         create_tab(con, curs, "loc_comm", {"id":"INT PRIMARY KEY", 'country':"VARCHAR(80)",'city':"VARCHAR(80)"})
         create_tab(con, curs, "aud_comm", {"id":"INT PRIMARY KEY", 'nmembers':"INT",'age':"VARCHAR(4)"})
+        data_db_base = fetch_data(con, curs, "base_comm")
     except Exception as e:
         log.error(e.args[0])
+        raise e
+    list_ids_db = [data_db_base[ind][0] for ind in range(len(data_db_base))]
     queue = multiprocessing.Queue()
     queue_store = multiprocessing.Queue()
-    taskq = CreateTaskQueue(queue, opts.numpackco, start_ids=opts.startid , num_ids_chunk=opts.packreq)
+    taskq = CreateTaskQueue(
+        queue, 
+        int(opts.numpackco), 
+        start_ids=int(opts.startid), 
+        num_ids_chunk=int(opts.packreq)
+        )
     taskq.start()
     filds = settings['paramreq']["filds"]
     tasks = [TaskVkPars(
@@ -240,7 +256,8 @@ def main(opts):
         queue_store, 
         store, 
         con,
-        curs))
+        curs,
+        list_ids_db))
     taskclsf.start()
     taskq.join()
     for _ in tasks:
@@ -268,7 +285,7 @@ if __name__ == "__main__":
     try:    
         log.info("Start")
         main(opts)
-    except KeyboardInterrupt:
-        pass
     except Exception as e:
         log.error(e)
+    except KeyboardInterrupt:
+        pass

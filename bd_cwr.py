@@ -19,8 +19,7 @@ def connect_bd(db='postgres', user='postgres', passw='', host="127.0.0.1", port=
 def create_tab(conn, cur, name_table, kwargs):
     try:
         par_col = ', '.join(f'{name} {val}' for name, val in kwargs.items())
-        str_cmd = f'CREATE TABLE {name_table} ({par_col})'
-        print(str_cmd)
+        str_cmd = f'CREATE TABLE IF NOT EXISTS {name_table} ({par_col})'
         cur.execute(str_cmd)
     except psycopg2.DatabaseError as error:
         raise BDError("Error create table.")
@@ -58,12 +57,16 @@ def del_table(conn, cur, name_table):
 if __name__ == "__main__":
     """primer"""
     #con, cur = connect_bd(db="vkmybd", user="postgres", passw="")
-    #create_tab(con, cur, 'loc_comm', {"id":"INT PRIMARY KEY", 'name':"VARCHAR(80)", "classification": 'VARCHAR(80)'})
+    #create_tab(con, cur, 'base_comm', {"id":"INT PRIMARY KEY", 'name':"VARCHAR(80)", "classification": 'VARCHAR(80)'})
     #insert_in_table(con, cur, 'loc_comm', [1334, 'юийска', 'None'])
-    #dat = fetch_data(con, cur, 'loc_comm')
+    #dat1 = fetch_data(con, cur, 'base_comm')
+    #dat2 = fetch_data(con, cur, 'aud_comm')
+    #dat3 = fetch_data(con, cur, 'loc_comm')
     #del_table(con, cur, 'base_comm')
     #del_table(con, cur, 'aud_comm')
     #del_table(con, cur, 'loc_comm')
-    #print(dat)
+  
+    
+
 
     
