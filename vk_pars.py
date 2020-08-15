@@ -123,7 +123,6 @@ class TaskVkPars(multiprocessing.Process):
 
     async def reqw(self):
         if self.queue.empty():
-            print('пусто')
             return
         strquer = self.queue.get(timeout=1)
         if strquer is None:
