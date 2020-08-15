@@ -31,7 +31,7 @@ class RedisStore():
                 return self.server.set(key, value, expire)
             except (TimeoutError, ConnectionError):
                 time.sleep(self.delay*attm)
-
+    
 
 if __name__ == "__main__":
-    pass   
+    pass

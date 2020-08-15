@@ -65,8 +65,3 @@ if __name__ == "__main__":
     #del_table(con, cur, 'base_comm')
     #del_table(con, cur, 'aud_comm')
     #del_table(con, cur, 'loc_comm')
-  
-    
-
-
-    

@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from optparse import OptionParser
 from classific import group_classification
 from bd_cwr import connect_bd, create_tab, insert_in_table, fetch_data
+import aioredis
 
 
 NUM_PROC_TASK_VK_PARS = 2
@@ -121,37 +122,43 @@ class TaskVkPars(multiprocessing.Process):
         return list_comm
 
     async def reqw(self):
-        try:
-            strquer = self.queue.get(timeout=1)
-            if strquer is None:
-                self.stop = True
-                return
-            data = await self.api.groups.getById(group_ids=strquer, fields=self.fields)
-            list_comm = self.extract_info(data)
-            str_list_comm = json.dumps(list_comm).encode('utf-8')
-            key = 'rid' + hashlib.md5(str_list_comm).hexdigest()
-            if self.store.set(key, str_list_comm, 360):
-                self.queue_store.put(key)
-        except Exception as e:
-            log.info(e)
+        if self.queue.empty():
+            print('пусто')
+            return
+        strquer = self.queue.get(timeout=1)
+        if strquer is None:
+            self.stop = True
+            return      
+        data = await self.api.groups.getById(group_ids=strquer, fields=self.fields)
+        list_comm = self.extract_info(data)
+        str_list_comm = json.dumps(list_comm).encode('utf-8')
+        key = 'rid' + hashlib.md5(str_list_comm).hexdigest()
+        await self.async_redis_pool.set(key, str_list_comm)
+        self.queue_store.put(key)
    
     async def start_task(self):
-        tasks_cor = []
-        for _ in range(self.num_cor_task):
-            tasks_cor.append(acincio.create_task(reqw()))
-        await asyncio.gather(*tasks_cor)
+        try:
+            tasks_cor = []
+            for _ in range(self.num_cor_task):
+                tasks_cor.append(asyncio.create_task(self.reqw()))
+            await asyncio.gather(*tasks_cor)
+        except Exception as e:
+            log.info(e.args[0])
 
-    async def main(self):
+    async def main(self):   
         async with aiovk.TokenSession(access_token=self.token) as session:
             self.api = aiovk.API(session)
+            self.async_redis_pool = await aioredis.create_redis_pool(('localhost', 6379),timeout=1)
             while True:
                 if self.stop:
                     break
                 try:
-                    await asyncio.wait_for(self.reqw(), timeout=10)
+                    await asyncio.wait_for(self.start_task(), timeout=10)
                 except asyncio.TimeoutError:
                     log.info('Error timeout request_period')
                 await asyncio.sleep(1)
+            self.async_redis_pool.close()
+            await self.async_redis_pool.wait_closed()
                 
     def run(self):
         log.debug(self.name)
@@ -219,7 +226,6 @@ def classif_comm(data_train, queue_store, store, con, curs, list_ids_db):
 
 def main(opts):
     settings, secur = configs_load(opts)
-    print(opts)
     store = RedisStore()
     con, curs = connect_bd(db=opts.bdata, passw=secur['security']['pswdbd'])
     try:
@@ -240,13 +246,15 @@ def main(opts):
         num_ids_chunk=int(opts.packreq)
         )
     taskq.start()
+    num_corr = 4
     filds = settings['paramreq']["filds"]
     tasks = [TaskVkPars(
         queue, 
         secur['security']['token_vk'], 
         filds, 
         store, 
-        queue_store
+        queue_store,
+        num_cor_tasks=num_corr
         ) for _ in range(NUM_PROC_TASK_VK_PARS)]
     for t in tasks:
         t.start()
@@ -260,7 +268,7 @@ def main(opts):
         list_ids_db))
     taskclsf.start()
     taskq.join()
-    for _ in tasks:
+    for _ in range(len(tasks)*num_corr):
         queue.put(None)
     for t in tasks:
         t.join() 
